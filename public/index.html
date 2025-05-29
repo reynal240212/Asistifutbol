@@ -54,10 +54,7 @@
     const SUPABASE_PROJECT_URL = 'https://wdnlqfiwuocmmcdowjyw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbmxxZml3dW9jbW1jZG93anl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1MjY1ODAsImV4cCI6MjA2NDEwMjU4MH0.4SCS_NRDIYLQJ1XouqW111BxkMOlwMWOjje9gFTgW_Q';
 
-    // La librería Supabase (cargada desde el CDN) está disponible como el objeto global 'supabase'.
-    // Este objeto contiene el método 'createClient'.
-    // Lo llamamos y asignamos la *instancia del cliente resultante* a window.supabase.
-    // Esto hace que nuestra instancia de cliente esté globalmente disponible para otros scripts.
+
     if (supabase && typeof supabase.createClient === 'function') {
       window.supabase = supabase.createClient(SUPABASE_PROJECT_URL, SUPABASE_ANON_KEY);
       console.log('Cliente Supabase inicializado en index.html y asignado a window.supabase');

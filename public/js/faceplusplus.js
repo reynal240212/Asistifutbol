@@ -114,11 +114,12 @@ async function cargarAsistencias() {
     const { data, error } = await supabase // Esto usará window.supabase
       .from('asistencias')
       .select(`
-        id,
-        fecha,
-        tipo_evento,
-        asistio,
-        jugadores (nombre)
+        jugador_id: jugador_id,
+        fecha: fechaActual,
+        tipo_evento: 'entrenamiento',
+        asistio: true,
+        fuente: 'reconocimiento facial',
+        foto_tomada_url: foto_url,
       `)
       .order('fecha', { ascending: false });
 
@@ -187,4 +188,27 @@ async function guardarAsistenciaEnSupabase(nombreJugador, asistioStatus) {
     mostrarMensaje('Error inesperado al guardar en BD.', 'danger');
   }
 }
-*/
+async function subirFotoYRegistrar(jugador_id, archivoBlob) {
+  const nombreArchivo = `asistencia_${jugador_id}_${Date.now()}.png`;
+
+  // Subir al bucket "fotos"
+  const { data: storageData, error: uploadError } = await window.supabase
+    .storage
+    .from('fotos')  // <-- el nombre del bucket debe existir en Supabase
+    .upload(nombreArchivo, archivoBlob);
+
+  if (uploadError) {
+    console.error('Error al subir la foto:', uploadError.message);
+    return;
+  }
+
+  const { data: publicUrlData } = window.supabase
+    .storage
+    .from('fotos')
+    .getPublicUrl(nombreArchivo);
+
+  const urlPublica = publicUrlData.publicUrl;
+
+  // Registrar asistencia
+  registrarAsistencia(jugador_id, urlPublica);
+}
