@@ -42,26 +42,31 @@
   </main>
 
   <footer class="bg-light text-center py-3 mt-auto">
-    <p class="mb-0">&copy; 2025 DIBA FBC - Todos los derechos reservados</p>
+    <p class="mb-0">© 2025 DIBA FBC - Todos los derechos reservados</p>
   </footer>
 
-  <!-- Supabase -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-  <!-- Tu lógica JS -->
+  <!-- Script CDN de Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+  <!-- Script de Inicialización del Cliente Supabase -->
   <script>
-    // Inicializa el cliente de Supabase aquí
-    // Reemplaza 'YOUR_SUPABASE_URL' y 'YOUR_SUPABASE_ANON_KEY' con tus credenciales reales.
-    const SUPABASE_URL = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbmxxZml3dW9jbW1jZG93anl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1MjY1ODAsImV4cCI6MjA2NDEwMjU4MH0.4SCS_NRDIYLQJ1XouqW111BxkMOlwMWOjje9gFTgW_Q';
+    // Estas son las credenciales que parecen correctas (previamente en tu faceplusplus.js)
+    const SUPABASE_PROJECT_URL = 'https://wdnlqfiwuocmmcdowjyw.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbmxxZml3dW9jbW1jZG93anl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1MjY1ODAsImV4cCI6MjA2NDEwMjU4MH0.4SCS_NRDIYLQJ1XouqW111BxkMOlwMWOjje9gFTgW_Q';
 
-    // La librería Supabase (cargada desde el CDN) está disponible como la variable global 'supabase'.
-    // Usamos su método 'createClient' para inicializar nuestro cliente.
-    // Asignamos el cliente inicializado a window.supabase para que esté globalmente disponible para otros scripts.
-    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
-
+    // La librería Supabase (cargada desde el CDN) está disponible como el objeto global 'supabase'.
+    // Este objeto contiene el método 'createClient'.
+    // Lo llamamos y asignamos la *instancia del cliente resultante* a window.supabase.
+    // Esto hace que nuestra instancia de cliente esté globalmente disponible para otros scripts.
+    if (supabase && typeof supabase.createClient === 'function') {
+      window.supabase = supabase.createClient(SUPABASE_PROJECT_URL, SUPABASE_ANON_KEY);
+      console.log('Cliente Supabase inicializado en index.html y asignado a window.supabase');
+    } else {
+      console.error('La librería Supabase no se cargó correctamente o createClient no está disponible.');
+    }
   </script>
  
-   <!-- Tu lógica JS -->
+   <!-- Tu script de lógica personalizada (faceplusplus.js) -->
   <script src="js/faceplusplus.js"></script>
 
    <!-- Bootstrap JS Bundle -->
