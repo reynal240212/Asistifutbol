@@ -1,19 +1,25 @@
+// js/faceplusplus.js
+
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const btnCapturar = document.getElementById('btn-capturar');
 const mensaje = document.getElementById('face-message');
 const listaAsistencias = document.getElementById('lista-asistencias');
 
+// 🔐 Se espera que el cliente Supabase esté inicializado en index.html
+// y disponible globalmente como 'supabase' o 'window.supabase'.
+// NO lo redeclares ni lo reinicialices aquí.
+// ELIMINA LAS SIGUIENTES LÍNEAS:
+// const supabaseUrl = 'https://wdnlqfiwuocmmcdowjyw.supabase.co';
+// const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbmxxZml3dW9jbW1jZG93anl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1MjY1ODAsImV4cCI6MjA2NDEwMjU4MH0.4SCS_NRDIYLQJ1XouqW111BxkMOlwMWOjje9gFTgW_Q';
+// const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-const supabaseUrl = 'https://wdnlqfiwuocmmcdowjyw.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbmxxZml3dW9jbW1jZG93anl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1MjY1ODAsImV4cCI6MjA2NDEwMjU4MH0.4SCS_NRDIYLQJ1XouqW111BxkMOlwMWOjje9gFTgW_Q';
-const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-
+// ⚠️ Reemplaza estas claves por tus propias credenciales de Face++
 const API_KEY = '-_MnSfFBpj_afaQSVeATkyly5rMS35b9';
 const API_SECRET = 'c07uRGg-jNewVeRrGnTDq3Y_33sXCZni';
 
-
+// Iniciar cámara con manejo de errores
 async function iniciarCamara() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -25,7 +31,7 @@ async function iniciarCamara() {
 
 iniciarCamara();
 
-
+// Capturar imagen y procesar
 btnCapturar.addEventListener('click', () => {
   if (video.readyState !== 4) {
     mostrarMensaje('La cámara aún no está lista. Por favor, espera...', 'warning');
@@ -40,7 +46,7 @@ btnCapturar.addEventListener('click', () => {
   detectarRostro(imagenBase64);
 });
 
-
+// Detectar rostro con Face++
 async function detectarRostro(imagenBase64) {
   mostrarMensaje('Procesando imagen...', 'info');
 
@@ -66,6 +72,8 @@ async function detectarRostro(imagenBase64) {
       mostrarMensaje(`Rostro detectado: ${genero}, ${edad} años`, 'success');
       agregarAsistencia(`Jugador detectado`, `Presente - ${hora}`);
 
+      // Aquí puedes agregar el código para guardar asistencia en Supabase si quieres
+      // await guardarAsistenciaEnSupabase('Jugador detectado', true); // Ejemplo
     } else {
       mostrarMensaje('No se detectó ningún rostro. Intenta de nuevo.', 'warning');
     }
@@ -75,13 +83,14 @@ async function detectarRostro(imagenBase64) {
   }
 }
 
-
+// Mostrar mensajes con clase bootstrap
 function mostrarMensaje(texto, tipo) {
   mensaje.className = `alert alert-${tipo} mt-3`;
   mensaje.textContent = texto;
   mensaje.classList.remove('d-none');
 }
 
+// Agregar asistencia a la lista visual
 function agregarAsistencia(nombre, estado) {
   const li = document.createElement('li');
   li.className = 'list-group-item d-flex justify-content-between align-items-center';
@@ -92,10 +101,17 @@ function agregarAsistencia(nombre, estado) {
   listaAsistencias.appendChild(li);
 }
 
-
+// Cargar asistencias desde Supabase y mostrar en lista
 async function cargarAsistencias() {
+  // Verifica si el cliente supabase está disponible
+  if (!window.supabase) {
+      mostrarMensaje('Cliente Supabase no inicializado.', 'danger');
+      console.error('El cliente Supabase (window.supabase) no está disponible.');
+      return;
+  }
   try {
-    const { data, error } = await supabase
+    // 'supabase' aquí se refiere a window.supabase, que es la instancia del cliente
+    const { data, error } = await supabase // Esto usará window.supabase
       .from('asistencias')
       .select(`
         id,
@@ -112,13 +128,13 @@ async function cargarAsistencias() {
       return;
     }
 
-    listaAsistencias.innerHTML = '';
+    listaAsistencias.innerHTML = ''; // Limpiar lista anterior
 
     data.forEach(asistencia => {
       const nombre = asistencia.jugadores?.nombre || 'Desconocido';
       const estado = asistencia.asistio ? 'Presente' : 'Ausente';
       const clase = asistencia.asistio ? 'bg-success' : 'bg-danger';
-      const fecha = new Date(asistencia.fecha).toLocaleDateString('es-CO');
+      const fecha = new Date(asistencia.fecha).toLocaleDateString('es-CO'); // Formato de fecha para Colombia
 
       const item = document.createElement('li');
       item.className = 'list-group-item d-flex justify-content-between align-items-center';
@@ -136,3 +152,39 @@ async function cargarAsistencias() {
 }
 
 document.addEventListener('DOMContentLoaded', cargarAsistencias);
+
+//Opcional: Función de ejemplo si quieres guardar en Supabase después de la detección
+
+async function guardarAsistenciaEnSupabase(nombreJugador, asistioStatus) {
+  if (!window.supabase) {
+    console.error('Cliente Supabase no disponible para guardar.');
+    return;
+  }
+  try {
+    const { data, error } = await supabase // Esto usará window.supabase
+      .from('asistencias') // O tu tabla relevante
+      .insert([
+        { 
+          // Ajusta las columnas según la estructura de tu tabla 'asistencias'
+          // jugador_nombre: nombreJugador, // si tienes una columna directa para el nombre
+          // jugador_id: algun_id, // si enlazas a una tabla 'jugadores'
+          fecha: new Date().toISOString(),
+          asistio: asistioStatus,
+          tipo_evento: 'Reconocimiento Facial'
+        }
+      ]);
+
+    if (error) {
+      console.error('Error guardando asistencia en Supabase:', error);
+      mostrarMensaje('Error al guardar asistencia en BD.', 'danger');
+    } else {
+      console.log('Asistencia guardada en Supabase:', data);
+      mostrarMensaje('Asistencia registrada en BD.', 'success');
+      cargarAsistencias(); // Refrescar la lista
+    }
+  } catch (err) {
+    console.error('Error inesperado guardando en Supabase:', err);
+    mostrarMensaje('Error inesperado al guardar en BD.', 'danger');
+  }
+}
+*/
