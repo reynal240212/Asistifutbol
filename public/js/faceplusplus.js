@@ -153,8 +153,8 @@ async function cargarAsistencias() {
 
 document.addEventListener('DOMContentLoaded', cargarAsistencias);
 
-//Opcional: Función de ejemplo si quieres guardar en Supabase después de la detección
-
+// Opcional: Función de ejemplo si quieres guardar en Supabase después de la detección
+/*
 async function guardarAsistenciaEnSupabase(nombreJugador, asistioStatus) {
   if (!window.supabase) {
     console.error('Cliente Supabase no disponible para guardar.');
