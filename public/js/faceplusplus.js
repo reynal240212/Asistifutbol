@@ -15,9 +15,9 @@ const listaAsistencias = document.getElementById('lista-asistencias');
 // const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
 
-// ⚠️ Reemplaza estas claves por tus propias credenciales de Face++
-const API_KEY = '-_MnSfFBpj_afaQSVeATkyly5rMS35b9';
-const API_SECRET = 'c07uRGg-jNewVeRrGnTDq3Y_33sXCZni';
+// ⚠️ Las claves de Face++ se gestionarán a través del Edge Function de Supabase
+// const API_KEY = '-_MnSfFBpj_afaQSVeATkyly5rMS35b9'; // REMOVE
+// const API_SECRET = 'c07uRGg-jNewVeRrGnTDq3Y_33sXCZni'; // REMOVE
 
 // Iniciar cámara con manejo de errores
 async function iniciarCamara() {
@@ -46,22 +46,42 @@ btnCapturar.addEventListener('click', () => {
   detectarRostro(imagenBase64);
 });
 
-// Detectar rostro con Face++
+// Detectar rostro con el Edge Function de Supabase
 async function detectarRostro(imagenBase64) {
   mostrarMensaje('Procesando imagen...', 'info');
 
-  const formData = new FormData();
-  formData.append('api_key', API_KEY);
-  formData.append('api_secret', API_SECRET);
-  formData.append('image_base64', imagenBase64);
-  formData.append('return_attributes', 'gender,age');
+  // Ensure supabase client is available
+  if (!window.supabase || !window.supabase.supabaseUrl || !window.supabase.supabaseKey) {
+    mostrarMensaje('Error: Cliente Supabase no está configurado correctamente.', 'danger');
+    console.error('Supabase client (window.supabase) or its properties are not available.');
+    return;
+  }
+
+  // Construct the Edge Function URL
+  // The Supabase URL from window.supabase.supabaseUrl is like "https://<project-ref>.supabase.co"
+  // We need to append "/functions/v1/faceplusplus-proxy"
+  const edgeFunctionUrl = `${window.supabase.supabaseUrl}/functions/v1/faceplusplus-proxy`;
 
   try {
-    const response = await fetch('https://api-us.faceplusplus.com/facepp/v3/detect', {
+    const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${window.supabase.supabaseKey}`, // Use the anon key
+        'apikey': window.supabase.supabaseKey // Supabase also often expects the anon key as 'apikey'
+      },
+      body: JSON.stringify({ image_base64: imagenBase64 })
     });
+
     const data = await response.json();
+
+    if (!response.ok) {
+      // Handle errors from the Edge Function or network issues
+      console.error('Error from Face++ proxy or network:', data);
+      const errorMessage = data.error || `Error al procesar: ${response.status} ${response.statusText}`;
+      mostrarMensaje(errorMessage, 'danger');
+      return;
+    }
 
     if (data.faces && data.faces.length > 0) {
       const atributos = data.faces[0].attributes;
@@ -69,17 +89,34 @@ async function detectarRostro(imagenBase64) {
       const edad = atributos.age.value;
       const hora = new Date().toLocaleTimeString();
 
-      mostrarMensaje(`Rostro detectado: ${genero}, ${edad} años`, 'success');
-      agregarAsistencia(`Jugador detectado`, `Presente - ${hora}`);
+      // This part of the logic can remain similar,
+      // as the Edge Function should forward the relevant Face++ response structure.
+      // However, the next step in the plan is to save to Supabase from the Edge Function itself.
+      // So, the frontend message might eventually change to reflect that.
+      // For now, we assume the Edge Function *only* proxies to Face++.
+      // The plan step 3 will modify the Edge function to also save to DB.
 
-      // Aquí puedes agregar el código para guardar asistencia en Supabase si quieres
+      mostrarMensaje(`Rostro detectado: ${genero}, ${edad} años (procesado por backend)`, 'success');
+
+      // The plan is to save attendance from the Edge Function (step 3).
+      // So, the frontend's role in adding to the list might change or be triggered by a more specific success message.
+      // For now, let's keep the existing behavior of adding to the visual list directly.
+      // We might need to call cargarAsistencias() if the saving logic is confirmed in the Edge Function later.
+      agregarAsistencia(`Jugador detectado (Backend)`, `Presente - ${hora}`);
+
+      // The old code for saving to Supabase from client-side is commented out, which is good.
       // await guardarAsistenciaEnSupabase('Jugador detectado', true); // Ejemplo
-    } else {
-      mostrarMensaje('No se detectó ningún rostro. Intenta de nuevo.', 'warning');
+    } else if (data.error_message) {
+      // Handle specific errors returned by Face++ via the proxy
+      console.error('Error from Face++ API:', data.error_message);
+      mostrarMensaje(`Error de Face++: ${data.error_message}`, 'warning');
+    }
+    else {
+      mostrarMensaje('No se detectó ningún rostro. Intenta de nuevo. (procesado por backend)', 'warning');
     }
   } catch (error) {
-    console.error(error);
-    mostrarMensaje('Error al procesar la imagen.', 'danger');
+    console.error('Error al llamar al Edge Function:', error);
+    mostrarMensaje(`Error de conexión con el backend: ${error.message}`, 'danger');
   }
 }
 
