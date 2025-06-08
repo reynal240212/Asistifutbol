@@ -41,3 +41,103 @@ main {
 }
 
 
+/* ======================================
+       FOOTER
+====================================== */
+.footer {
+  background-color: var(--primary-dark);
+  color: var(--light-gray); /* MODIFICADO: Mejora el contraste del texto general del footer sobre fondo oscuro. Anteriormente var(--primary) tenía bajo contraste. */
+  padding: var(--space-xl) 0;
+}
+
+.footer-logo {
+  display: flex;            /* Mantenido: Útil si hubiera múltiples elementos o para un control fino, aunque con una sola imagen es menos crítico. */
+  justify-content: center;  /* Mantenido: Centra el contenido flex (la imagen) horizontalmente dentro de este div. */
+  align-items: center;      /* Mantenido: Centra el contenido flex (la imagen) verticalmente. */
+  /* width: 80px; */        /* ELIMINADO: Esta era la restricción principal. Ahora .footer-logo se adaptará al tamaño de la imagen que contenga. */
+  margin: 0 auto var(--space-md); /* Mantenido: Esto centra el bloque .footer-logo horizontalmente dentro de su contenedor padre (el .footer). */
+}
+
+/* AÑADIDO: Estilos para la imagen dentro de .footer-logo */
+.footer-logo img {
+  display: block; /* Es buena práctica para imágenes que quieres controlar con márgenes o tamaño. */
+  max-height: 60px; /* DEFINE EL TAMAÑO DEL LOGO: Ajusta este valor según necesites para el escudo. */
+  width: auto;      /* Mantiene la proporción original de la imagen. */
+}
+
+
+.footer-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  /* Si el .footer tuviera un text-align: center; global, necesitarías: */
+  /* text-align: left; */
+}
+
+.footer-links h5 {
+  color: var(--accent);
+  margin-bottom: var(--space-md);
+  position: relative;
+  padding-bottom: var(--space-xs);
+}
+
+.footer-links h5::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 40px;
+  height: 2px;
+  background-color: var(--accent);
+}
+
+.footer-links ul {
+  list-style: none;
+  padding-left: 0; /* AÑADIDO: Elimina el padding por defecto que los navegadores aplican a las listas 'ul'. */
+}
+
+.footer-links li {
+  margin-bottom: var(--space-xs);
+}
+
+.footer-links a {
+  color: var(--white);
+  transition: color var(--transition-fast);
+}
+
+.footer-links a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.social-links {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.social-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  color: var(--white);
+  transition: all var(--transition-normal);
+}
+
+.social-links a:hover {
+  background-color: var(--accent);
+  color: var(--primary-dark);
+  transform: translateY(-3px);
+}
+
+.copyright {
+  text-align: center;
+  padding-top: var(--space-md);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: var(--space-lg);
+}
