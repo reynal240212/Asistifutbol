@@ -15,6 +15,7 @@ const listaAsistencias = document.getElementById('lista-asistencias');
 // Asegúrate de que estas claves sean correctas para tu proyecto Face++.
 const API_KEY = '-_MnSfFBpj_afaQSVeATkyly5rMS35b9';
 const API_SECRET = 'c07uRGg-jNewVeRrGnTDq3Y_33sXCZni';
+const FACESET_TOKEN = 'dibafbc_faces';
 
 /**
  * @function iniciarCamara
@@ -47,6 +48,10 @@ btnCapturar.addEventListener('click', () => {
         return;
     }
 
+    // Cambiar estado del botón a "Cargando"
+    btnCapturar.disabled = true;
+    btnCapturar.innerHTML = '<i class="fas fa-spinner spinner me-2"></i> Procesando...';
+
     const context = canvas.getContext('2d');
     // Ajusta el tamaño del canvas al tamaño del video para una captura correcta.
     canvas.width = video.videoWidth;
@@ -56,7 +61,7 @@ btnCapturar.addEventListener('click', () => {
 
     // Convierte la imagen del canvas a una cadena Base64 para enviarla a la API.
     const imagenBase64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1]; // 0.9 es la calidad de la imagen
-    
+
     // Obtener la URL base64 completa para posible subida a Supabase Storage
     const imagenFullBase64 = canvas.toDataURL('image/jpeg', 0.9);
 
@@ -112,13 +117,14 @@ async function detectarRostro(imagenBase64, imagenFullBase64) {
             mostrarMensaje('Error inesperado al subir la foto.', 'warning');
         }
 
-        // PASO 2: Enviar la imagen a Face++ para detección
-        const response = await fetch('https://api-us.faceplusplus.com/facepp/v3/detect', {
+        // PASO 2: Enviar la imagen a Face++ para búsqueda real
+        formData.append('outer_id', FACESET_TOKEN); // Identificador de la colección creada
+
+        const response = await fetch('https://api-us.faceplusplus.com/facepp/v3/search', {
             method: 'POST',
             body: formData
         });
 
-        // Verifica si la respuesta HTTP fue exitosa.
         if (!response.ok) {
             const errorText = await response.text();
             throw new Error(`Error HTTP de Face++: ${response.status} - ${errorText}`);
@@ -126,30 +132,67 @@ async function detectarRostro(imagenBase64, imagenFullBase64) {
 
         const data = await response.json();
 
-        // Si se detectan rostros en la imagen.
-        if (data.faces && data.faces.length > 0) {
-            const atributos = data.faces[0].attributes;
-            const genero = atributos.gender.value;
-            const edad = atributos.age.value;
-            const hora = new Date().toLocaleTimeString('es-CO');
+        if (data.results && data.results.length > 0) {
+            const coincidencia = data.results[0]; // La cara con mejor match
 
-            mostrarMensaje(`Rostro detectado: ${genero}, ${edad} años`, 'success');
-            
-            // Agrega el registro visualmente
-            agregarAsistencia(`Jugador (Detectado)`, `Presente - ${hora}`);
-            
-            // Guarda la asistencia en Supabase.
-            // Actualmente jugador_id será null ya que no estamos identificando.
-            await guardarAsistenciaEnSupabase(null, true, 'Reconocimiento Facial', fotoUrlGuardada);
+            // Face++ recomienda al menos un valor de confidence > threshold (normalmente > ~70-80 pero usaremos su propio threshold recomendado: 1e-4)
+            if (coincidencia.confidence < data.thresholds["1e-4"]) {
+                mostrarMensaje('Rostro dudoso. Acércate más a la cámara o regístrate en el módulo de Admin.', 'warning');
+                return;
+            }
 
+            const recognizedFaceToken = coincidencia.face_token;
+            // Buscar a quién pertenece este token en la DB
+            const { data: dbData, error: dbError } = await window.supabase
+                .from('jugadores')
+                .select('id, nombre, categoria')
+                .eq('face_token', recognizedFaceToken)
+                .single();
+
+            if (dbError) {
+                console.error("Error buscando en Supabase:", dbError);
+                mostrarMensaje('Rostro reconocido por la cámara, pero no enlazado a ningún jugador activo en Supabase.', 'warning');
+                return;
+            }
+
+            const jugador = dbData;
+            mostrarMensaje(`¡Hola ${jugador.nombre}! Asistencia confirmada.`, 'success');
+
+            // Sintetizador de Voz para leer el nombre en alto
+            hablar(`Asistencia registrada para ${jugador.nombre}.`);
+
+            agregarAsistencia(jugador.nombre, `Presente`);
+
+            // Guarda la asistencia en Supabase con el ID real
+            await guardarAsistenciaEnSupabase(jugador.id, true, 'Reconocimiento Facial', fotoUrlGuardada);
+
+        } else if (data.faces && data.faces.length > 0) {
+            mostrarMensaje('Rostro detectado pero no está en la base de datos de tu club. Pide a tu entrenador que te registre.', 'warning');
+            hablar('Rostro no registrado. Solicita tu registro.');
         } else {
             mostrarMensaje('No se detectó ningún rostro. Intenta de nuevo.', 'warning');
-            // Si no se detecta rostro, aún puedes registrar la foto si lo deseas, o simplemente omitir el registro.
-            // await guardarAsistenciaEnSupabase(null, false, 'No Reconocido', fotoUrlGuardada);
+            hablar('Ningún rostro detectado.');
         }
     } catch (error) {
         console.error('Error general en detectarRostro:', error);
         mostrarMensaje('Error al procesar la imagen. Consulta la consola para más detalles.', 'danger');
+    } finally {
+        // Restaurar estado del botón
+        btnCapturar.disabled = false;
+        btnCapturar.innerHTML = '<i class="fas fa-camera me-2"></i> Capturar Rostro';
+    }
+}
+
+/**
+ * @function hablar
+ * @description Utiliza la API de síntesis de voz Web (TTS) para hablar un texto.
+ */
+function hablar(texto) {
+    if ('speechSynthesis' in window) {
+        const mensaje = new SpeechSynthesisUtterance(texto);
+        mensaje.lang = 'es-CO'; // Español Colombia
+        mensaje.rate = 1.0;
+        window.speechSynthesis.speak(mensaje);
     }
 }
 
@@ -175,14 +218,46 @@ function decodeBase64Image(dataUrl) {
 
 /**
  * @function mostrarMensaje
- * @description Muestra un mensaje en la interfaz de usuario con estilos Bootstrap.
+ * @description Muestra un mensaje en la interfaz de usuario con Toast de Bootstrap.
  * @param {string} texto - El contenido del mensaje a mostrar.
- * @param {string} tipo - El tipo de alerta de Bootstrap (ej: 'info', 'success', 'warning', 'danger').
+ * @param {string} tipo - El tipo de alerta (ej: 'info', 'success', 'warning', 'danger').
  */
 function mostrarMensaje(texto, tipo) {
-    mensaje.className = `alert alert-${tipo} mt-3`;
-    mensaje.textContent = texto;
-    mensaje.classList.remove('d-none'); // Asegura que el mensaje sea visible.
+    const toastEl = document.getElementById('liveToast');
+    if (!toastEl) {
+        console.warn('Toast element not found, falling back to basic alert.');
+        // Fallback en caso de que index.html no esté actualizado
+        if (mensaje) {
+            mensaje.className = `alert alert-${tipo} mt-3`;
+            mensaje.textContent = texto;
+            mensaje.classList.remove('d-none');
+        }
+        return;
+    }
+
+    const toastBody = document.getElementById('toast-body-content');
+
+    toastEl.classList.remove('toast-success', 'toast-error', 'toast-warning', 'toast-info');
+
+    let icono = '';
+    if (tipo === 'success') {
+        toastEl.classList.add('toast-success');
+        icono = '<i class="fas fa-check-circle text-success fs-5"></i>';
+    } else if (tipo === 'danger') {
+        toastEl.classList.add('toast-error');
+        icono = '<i class="fas fa-exclamation-circle text-danger fs-5"></i>';
+    } else if (tipo === 'warning') {
+        toastEl.classList.add('toast-warning');
+        icono = '<i class="fas fa-exclamation-triangle text-warning fs-5"></i>';
+    } else {
+        toastEl.classList.add('toast-info');
+        icono = '<i class="fas fa-info-circle text-primary fs-5"></i>';
+    }
+
+    toastBody.innerHTML = `${icono} <span class="fw-medium">${texto}</span>`;
+
+    const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
+    toast.show();
 }
 
 /**
@@ -193,10 +268,16 @@ function mostrarMensaje(texto, tipo) {
  */
 function agregarAsistencia(nombre, estado) {
     const li = document.createElement('li');
-    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+    li.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2';
+
+    const icon = estado.includes('Presente') ? '<i class="fas fa-user-check text-success me-2"></i>' : '<i class="fas fa-user-times text-danger me-2"></i>';
+
     li.innerHTML = `
-        ${nombre}
-        <span class="badge bg-success rounded-pill">${estado}</span>
+        <div class="d-flex align-items-center">
+            ${icon}
+            <span class="fw-semibold">${nombre}</span>
+        </div>
+        <span class="badge bg-success rounded-pill shadow-sm">${estado}</span>
     `;
     listaAsistencias.prepend(li); // Agrega al principio para ver las más recientes.
 }
@@ -213,7 +294,7 @@ async function cargarAsistencias() {
         console.error('El cliente Supabase (window.supabase) no está disponible. Asegúrate de que se inicialice en index.html');
         return;
     }
-    
+
     try {
         // Realiza la consulta a la tabla 'asistencias' y une con la tabla 'jugadores'.
         // Aquí 'supabase' se refiere a 'window.supabase'.
@@ -250,11 +331,19 @@ async function cargarAsistencias() {
                 // Formatea la fecha para mostrarla de manera legible (solo fecha para columna `date`).
                 const fecha = new Date(asistencia.fecha).toLocaleDateString('es-CO'); // Formato de fecha para Colombia
 
+                const icon = asistencia.asistio ? '<i class="fas fa-user-check text-success me-2"></i>' : '<i class="fas fa-user-times text-danger me-2"></i>';
+
                 const item = document.createElement('li');
-                item.className = 'list-group-item d-flex justify-content-between align-items-center';
+                item.className = 'list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2';
                 item.innerHTML = `
-                    ${nombre} - ${asistencia.tipo_evento || 'Evento General'}
-                    <span class="badge ${clase} rounded-pill">${estado} - ${fecha}</span>
+                    <div class="d-flex align-items-center flex-grow-1">
+                        ${icon}
+                        <div>
+                            <span class="fw-semibold d-block">${nombre}</span>
+                            <small class="text-muted d-block" style="font-size: 0.75rem;"><i class="fas fa-tag me-1"></i>${asistencia.tipo_evento || 'Evento General'}</small>
+                        </div>
+                    </div>
+                    <span class="badge ${clase} rounded-pill shadow-sm">${estado} - ${fecha}</span>
                 `;
                 listaAsistencias.appendChild(item);
             });
