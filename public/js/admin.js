@@ -6,178 +6,100 @@ const btnEscanear = document.getElementById('btn-escanear');
 const btnVincular = document.getElementById('btn-vincular');
 const selectJugador = document.getElementById('select-jugador');
 
-const SUPABASE_PROJECT_URL = 'https://wdnlqfiwuocmmcdowjyw.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkbmxxZml3dW9jbW1jZG93anl3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg1MjY1ODAsImV4cCI6MjA2NDEwMjU4MH0.4SCS_NRDIYLQJ1XouqW111BxkMOlwMWOjje9gFTgW_Q';
-
-const API_KEY = '-_MnSfFBpj_afaQSVeATkyly5rMS35b9';
-const API_SECRET = 'c07uRGg-jNewVeRrGnTDq3Y_33sXCZni';
-const FACESET_TOKEN = 'b173ae94ae4b67fa9f37c768297b819f'; // Esto asume que tienes un FaceSet creado llamado dibafbc_faces
-
-window.supabase = supabase.createClient(SUPABASE_PROJECT_URL, SUPABASE_ANON_KEY);
-
-let currentFaceToken = null;
+function getSupabase() {
+    return window.supabaseClient;
+}
 
 async function iniciarCamara() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         video.srcObject = stream;
     } catch (err) {
-        mostrarMensaje('Error al acceder a la cámara.', 'danger');
+        console.error('Cámara error:', err);
     }
 }
 
-async function cargarJugadoresSinRostro() {
+async function cargarJugadores() {
+    const sb = getSupabase();
+    if (!sb) return;
     try {
-        const { data, error } = await supabase
-            .from('jugadores')
-            .select('id, nombre, categoria')
+        const { data, error } = await sb
+            .from('identificacion')
+            .select('numero, nombre, categoria')
             .is('face_token', null)
             .order('nombre');
 
         if (error) throw error;
 
-        selectJugador.innerHTML = '<option value="" selected>Selecciona un jugador...</option>';
-        if (data.length === 0) {
-            selectJugador.innerHTML = '<option value="" disabled>Todos los jugadores ya tienen rostro (o no hay jugadores).</option>';
-            return;
-        }
-
+        selectJugador.innerHTML = '<option value="">Selecciona registro...</option>';
         data.forEach(j => {
-            const option = document.createElement('option');
-            option.value = j.id;
-            option.textContent = `${j.nombre} (${j.categoria})`;
-            selectJugador.appendChild(option);
+            const opt = document.createElement('option');
+            opt.value = j.numero;
+            opt.textContent = `${j.nombre} (${j.categoria})`;
+            selectJugador.appendChild(opt);
         });
-
         selectJugador.disabled = false;
-    } catch (err) {
-        mostrarMensaje('Error cargando jugadores.', 'danger');
-        console.error(err);
+    } catch (e) {
+        console.error('Error cargando:', e);
     }
 }
+
+let lastToken = null;
 
 btnEscanear.addEventListener('click', async () => {
     if (video.readyState !== 4) return;
-
     btnEscanear.disabled = true;
-    btnEscanear.innerHTML = '<i class="fas fa-spinner spinner me-2"></i> Procesando rostro...';
-
-    const context = canvas.getContext('2d');
+    
+    const ctx = canvas.getContext('2d');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const imagenBase64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+    const b64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+
+    const fd = new FormData();
+    fd.append('api_key', ASISTEAM_CONFIG.faceppKey);
+    fd.append('api_secret', ASISTEAM_CONFIG.faceppSecret);
+    fd.append('image_base64', b64);
 
     try {
-        // 1. Detectar Rostro
-        const formDataDetect = new FormData();
-        formDataDetect.append('api_key', API_KEY);
-        formDataDetect.append('api_secret', API_SECRET);
-        formDataDetect.append('image_base64', imagenBase64);
+        const res = await fetch('https://api-us.faceplusplus.com/facepp/v3/detect', { method:'POST', body:fd });
+        const data = await res.json();
+        if (data.faces && data.faces.length > 0) {
+            lastToken = data.faces[0].face_token;
+            
+            const fdAdd = new FormData();
+            fdAdd.append('api_key', ASISTEAM_CONFIG.faceppKey);
+            fdAdd.append('api_secret', ASISTEAM_CONFIG.faceppSecret);
+            fdAdd.append('outer_id', ASISTEAM_CONFIG.faceppFaceSetId);
+            fdAdd.append('face_tokens', lastToken);
+            await fetch('https://api-us.faceplusplus.com/facepp/v3/faceset/addface', { method:'POST', body:fdAdd });
 
-        const resDetect = await fetch('https://api-us.faceplusplus.com/facepp/v3/detect', {
-            method: 'POST',
-            body: formDataDetect
-        });
-
-        const dataDetect = await resDetect.json();
-        if (!dataDetect.faces || dataDetect.faces.length === 0) {
-            throw new Error('No se detectó ningún rostro en la foto.');
+            document.getElementById('toast-body-content').innerText = "Rostro capturado. Vincúlalo.";
+            new bootstrap.Toast(document.getElementById('liveToast')).show();
+            btnVincular.disabled = false;
         }
-
-        currentFaceToken = dataDetect.faces[0].face_token;
-
-        // 2. Agregar a FaceSet
-        const formDataAdd = new FormData();
-        formDataAdd.append('api_key', API_KEY);
-        formDataAdd.append('api_secret', API_SECRET);
-        formDataAdd.append('outer_id', 'dibafbc_faces');
-        formDataAdd.append('face_tokens', currentFaceToken);
-
-        const resAdd = await fetch('https://api-us.faceplusplus.com/facepp/v3/faceset/addface', {
-            method: 'POST',
-            body: formDataAdd
-        });
-
-        const dataAdd = await resAdd.json();
-        if (dataAdd.error_message) {
-            throw new Error('Error añadiendo rostro a la colección Face++: ' + dataAdd.error_message);
-        }
-
-        mostrarMensaje('¡Rostro escaneado con éxito! Ahora selecciona un jugador y vincúlalo.', 'success');
-        btnVincular.disabled = false;
-
-    } catch (err) {
-        mostrarMensaje(err.message, 'danger');
-        currentFaceToken = null;
-        btnVincular.disabled = true;
-    } finally {
-        btnEscanear.disabled = false;
-        btnEscanear.innerHTML = '<i class="fas fa-camera-retro me-2"></i> Capturar Rostro';
-    }
+    } catch(e) {}
+    btnEscanear.disabled = false;
 });
 
 btnVincular.addEventListener('click', async () => {
-    const jugadorId = selectJugador.value;
-    if (!jugadorId || !currentFaceToken) {
-        mostrarMensaje('Por favor selecciona un jugador.', 'warning');
-        return;
+    const num = selectJugador.value;
+    if (!num || !lastToken) return;
+
+    btnVincular.disabled = true;
+    const { error } = await getSupabase()
+        .from('identificacion')
+        .update({ face_token: lastToken })
+        .eq('numero', num);
+
+    if (!error) {
+        document.getElementById('toast-body-content').innerText = "Vínculo exitoso.";
+        new bootstrap.Toast(document.getElementById('liveToast')).show();
+        cargarJugadores();
     }
-
-    try {
-        btnVincular.disabled = true;
-        btnVincular.innerHTML = '<i class="fas fa-spinner spinner me-2"></i> Vinculando...';
-
-        const { error } = await supabase
-            .from('jugadores')
-            .update({ face_token: currentFaceToken })
-            .eq('id', parseInt(jugadorId));
-
-        if (error) throw error;
-
-        mostrarMensaje('¡Jugador vinculado exitosamente!', 'success');
-
-        // Reset process
-        currentFaceToken = null;
-        btnVincular.disabled = true;
-        btnVincular.innerHTML = '<i class="fas fa-link me-2"></i> Vincular Rostro Seleccionado';
-
-        await cargarJugadoresSinRostro();
-
-    } catch (err) {
-        mostrarMensaje('Error guardando en base de datos.', 'danger');
-        console.error(err);
-        btnVincular.disabled = false;
-        btnVincular.innerHTML = '<i class="fas fa-link me-2"></i> Vincular Rostro Seleccionado';
-    }
+    btnVincular.disabled = false;
 });
 
-function mostrarMensaje(texto, tipo) {
-    const toastEl = document.getElementById('liveToast');
-    const toastBody = document.getElementById('toast-body-content');
-
-    toastEl.classList.remove('toast-success', 'toast-error', 'toast-warning', 'toast-info');
-
-    let icono = '';
-    if (tipo === 'success') {
-        toastEl.classList.add('toast-success');
-        icono = '<i class="fas fa-check-circle text-success fs-5"></i>';
-    } else if (tipo === 'danger') {
-        toastEl.classList.add('toast-error');
-        icono = '<i class="fas fa-exclamation-circle text-danger fs-5"></i>';
-    } else if (tipo === 'warning') {
-        toastEl.classList.add('toast-warning');
-        icono = '<i class="fas fa-exclamation-triangle text-warning fs-5"></i>';
-    } else {
-        toastEl.classList.add('toast-info');
-        icono = '<i class="fas fa-info-circle text-primary fs-5"></i>';
-    }
-
-    toastBody.innerHTML = `${icono} <span class="fw-medium">${texto}</span>`;
-    const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
-    toast.show();
-}
-
 iniciarCamara();
-cargarJugadoresSinRostro();
+cargarJugadores();
